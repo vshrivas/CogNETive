@@ -1,2 +1,2 @@
-# Cognitive
+# CogNETive
 Homemade Neural Network Library 
