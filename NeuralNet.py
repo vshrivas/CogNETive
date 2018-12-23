@@ -23,11 +23,27 @@ class NeuralNet:
 
         self.layer_errors = []
 
-    # generates a prediction based on the input
-    def feedforward(self):
-        pass
+    # runs backprop alg on all training examples
+    # data_pts: list of numpy arrays, where each array is a single point
+    # num_epochs: number of epochs to train this for
+    def train(self, data_pts, num_epochs):
+        '''for each example:
+            train the neural net for this example
+            run backprop alg to recompute the weights'''
+        for epoch in num_epochs:
+            # randomly sort all data_pts
+            for pt in data_pts:
+                # use the weights and activations to calculate prediction
+                self.feedforward(pt)
+                # improve weights based on cost
+                self.backprop()
 
-    def train(self):
+    # generates a prediction (y_hat) based on the input, weights, and activations
+    def feedforward(self, data_pt):
+        # set the data_pt as the first layer
+        self.layers[0].layer = data_pt
+        for i in range(1, self.num_layers): # compute values at each layer
+            self.layers[i].layer = self.activation(np.transpose(np.dot(np.transpose(self.layers[i-1]), self.weights[i])))
 
     # uses the backpropogation algorithm to update the weights
     def backprop(self):
@@ -48,7 +64,7 @@ class NeuralNet:
             # update weights by layer values of i-1th layer and layer errors of ith layer
             self.weights[i] -= np.dot(self.layers[i-1], np.transpose(self.layer_errors[i]))
 
-    # finds the derivative of the loss function
+    # evaluates the derivative of the loss function
     def loss_der(self):
         pass
 
@@ -56,5 +72,6 @@ class NeuralNet:
     def act_der(self, input):
         pass
 
+    # calculates the reverse of the activation values
     def layer_inputs(self, layer_index):
         pass
