@@ -25,7 +25,7 @@ class NeuralNet:
             weight_arr = np.random.randn(self.layers[i-1].size, self.layers[i].size) # double check array size
             self.weights.append(weight_arr)
 
-        self.epsilon = 3
+        self.eta = 3
 
     # runs backprop alg on all training examples
     # data_pts: list of numpy arrays, where each array is a single point
@@ -96,7 +96,7 @@ class NeuralNet:
             '''print(i)
             print(net_weight_changes[i].shape)
             print(self.weights[i].shape)'''
-            self.weights[i] -= (self.epsilon/len(x_batch)) * net_weight_changes[i]
+            self.weights[i] -= (self.eta/len(x_batch)) * net_weight_changes[i]
 
     # generates an output (y_hat) based on the input, weights, and activations
     def feedforward(self, data_pt):
@@ -158,7 +158,7 @@ class NeuralNet:
             '''if epoch > 1:
                 print("prev layer: ", self.layers[i-1].layer)
                 print("layer errors:", np.transpose(self.layer_errors[i]))
-                print("delta of weights ", i, self.epsilon * np.dot(self.layers[i-1].layer, np.transpose(self.layer_errors[i])))'''
+                print("delta of weights ", i, self.eta * np.dot(self.layers[i-1].layer, np.transpose(self.layer_errors[i])))'''
 
         return weight_deltas
 
