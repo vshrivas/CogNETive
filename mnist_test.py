@@ -31,19 +31,21 @@ print(training_data.shape)
 print(test_data.shape)
 
 NNet = NeuralNet([784, 30, 10])
-NNet.train(training_data_res, 100)
+NNet.train(training_data_res, 30, 10)
 
-numMatch = 0.0
-'''for i in range(0, test_data.shape[0]):
+numMatchTest = 0.0
+for i in range(0, test_data.shape[0]):
     yhat = NNet.predict(test_data[i])
-    if yhat == test_labels[i]:
-        numMatch += 1'''
+    if int(yhat) == int(test_labels[i]):
+        numMatchTest += 1
 
+numMatchTrain = 0.0
 for i in range(0, training_data.shape[0]):
     yhat = NNet.predict(training_data[i])
     if int(yhat) == int(train_labels[i]):
-        numMatch += 1
+        numMatchTrain += 1
     #else:
         #print(yhat, train_labels[i])
 
-print(numMatch/train_images.shape[0], (train_images.shape[0] - numMatch))
+print("Test Accuracy: ", numMatchTest/test_images.shape[0], (test_images.shape[0] - numMatchTest), " misclassified")
+print("Train Accuracy: ", numMatchTrain/train_images.shape[0], (train_images.shape[0] - numMatchTrain), " misclassified")

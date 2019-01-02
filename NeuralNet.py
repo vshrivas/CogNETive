@@ -30,7 +30,7 @@ class NeuralNet:
     # runs backprop alg on all training examples
     # data_pts: list of numpy arrays, where each array is a single point
     # num_epochs: number of epochs to train this for
-    def train(self, input, num_epochs):
+    def train(self, input, num_epochs, minibatch_size):
         '''for each example:
             train the neural net for this example
             run backprop alg to recompute the weights'''
@@ -43,34 +43,63 @@ class NeuralNet:
             #print(data_pts.shape)
             results = input[...,input.shape[1]-1]
             #print(results.shape)
-            for i in range(0, data_pts.shape[0]):
+            mini_batch_x = [data_pts[k:k+minibatch_size] for k in range(0, data_pts.shape[0], minibatch_size)]
+            mini_batch_y = [results[k:k+minibatch_size] for k in range(0, results.shape[0], minibatch_size)]
+
+            for i in range(0, len(mini_batch_x)): # for each batch
+                self.SGD_mini_batch(mini_batch_x[i], mini_batch_y[i])
+
+            '''for i in range(0, data_pts.shape[0]):
+
                 #print("pt: ", pt)
                 #print(pt.shape)
                 # use the weights and activations to calculate prediction
                 self.feedforward(data_pts[i], epoch)
 
-                '''result = np.zeros([self.layer_sizes[self.num_layers - 1], 1]) # zero probablities for all categories, except correct one
+                result = np.zeros([self.layer_sizes[self.num_layers - 1], 1]) # zero probablities for all categories, except correct one
                 result[int(results[i])] = 1 # 100% probablity of correct category
                 loss = self.find_loss(result)
                 #break
-                avg_loss += loss'''
+                avg_loss += loss
                 # improve weights based on cost
                 self.backprop(results[i], epoch)
 
                 #if i == 10:
                     #break
+            #break
+            print("accuracy epoch ", epoch, ":", numMatch, " / 10000")
+            #break'''
 
             numMatch = 0
             for i in range(0, 10000):
                 yhat = self.predict(data_pts[i])
                 if int(yhat) == int(results[i]):
                     numMatch += 1
-            #break
+
             print("accuracy epoch ", epoch, ":", numMatch, " / 10000")
-            #break
+
+    def SGD_mini_batch(self, x_batch, y_batch):
+        net_weight_changes = []
+        for i in range(1, self.num_layers):
+            net_weight_changes.append(np.zeros(self.weights[i].shape))
+
+        for i in range(0, len(x_batch)):
+            # use the weights and activations to calculate prediction
+            self.feedforward(x_batch[i])
+            weight_deltas = self.backprop(y_batch[i])
+            net_weight_changes = [delta + net_change for delta, net_change in zip(weight_deltas, net_weight_changes)]
+
+        #print(net_weight_changes.shape)
+        #print(self.weights.shape)
+        net_weight_changes.insert(0, -1)
+        for i in range(1, self.num_layers):
+            '''print(i)
+            print(net_weight_changes[i].shape)
+            print(self.weights[i].shape)'''
+            self.weights[i] -= (self.epsilon/len(x_batch)) * net_weight_changes[i]
 
     # generates an output (y_hat) based on the input, weights, and activations
-    def feedforward(self, data_pt, epoch):
+    def feedforward(self, data_pt):
         # set the data_pt as the first layer
         self.layers[0].layer = data_pt.reshape(self.layer_sizes[0], -1)
         #print("layer0", self.layers[0].layer)
@@ -95,20 +124,9 @@ class NeuralNet:
 
         #self.layers[self.num_layers - 1].layer = self.softmax(self.layers[self.num_layers - 1].layer)
 
-    # generates predictions on the input data, should be used after training network
-    def predict(self, data_pt):
-        self.feedforward(data_pt, 1)
-        #prediction_probs = self.softmax(self.layers[self.num_layers - 1].layer)
-        # find largest prob in neurons
-        largest_prob_neuron = 0
-        for i in range(0, self.layer_sizes[self.num_layers - 1]):
-            if self.layers[self.num_layers - 1].layer[i][0] > self.layers[self.num_layers - 1].layer[largest_prob_neuron][0]:
-                largest_prob_neuron = i
-
-        return largest_prob_neuron
-
     # uses the backpropogation algorithm to update the weights
-    def backprop(self, y_val, epoch):
+    def backprop(self, y_val):
+        weight_deltas = []
         #print("y_val", y_val)
         # generate what the actual result vector should be
         result = np.zeros([self.layer_sizes[self.num_layers - 1], 1]) # zero probablities for all categories, except correct one
@@ -136,11 +154,25 @@ class NeuralNet:
         # layer errors[i] -> [l(i), 1]
         for i in range(1, self.num_layers):
             # update weights by layer values of i-1th layer and layer errors of ith layer
-            self.weights[i] -= self.epsilon * np.dot(self.layers[i-1].layer, np.transpose(self.layer_errors[i]))
+            weight_deltas.append(np.dot(self.layers[i-1].layer, np.transpose(self.layer_errors[i])))
             '''if epoch > 1:
                 print("prev layer: ", self.layers[i-1].layer)
                 print("layer errors:", np.transpose(self.layer_errors[i]))
                 print("delta of weights ", i, self.epsilon * np.dot(self.layers[i-1].layer, np.transpose(self.layer_errors[i])))'''
+
+        return weight_deltas
+
+    # generates predictions on the input data, should be used after training network
+    def predict(self, data_pt):
+        self.feedforward(data_pt)
+        #prediction_probs = self.softmax(self.layers[self.num_layers - 1].layer)
+        # find largest prob in neurons
+        largest_prob_neuron = 0
+        for i in range(0, self.layer_sizes[self.num_layers - 1]):
+            if self.layers[self.num_layers - 1].layer[i][0] > self.layers[self.num_layers - 1].layer[largest_prob_neuron][0]:
+                largest_prob_neuron = i
+
+        return largest_prob_neuron
 
     def softmax(self, result):
         return np.exp(result)/np.sum(np.exp(result))
