@@ -1,2 +1,2 @@
 # CogNETive
-Homemade Neural Network Library 
+Machine Learning Library from Scratch
