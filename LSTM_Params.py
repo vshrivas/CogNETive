@@ -10,7 +10,7 @@ class Var:
 class Params:
     # Z, concatenation of h prev and X, has dimensions (Z x 1)
     # W * Z -> (h_size, 1) so W has dimensions ()
-    def __init__(self, H_size, X_size, z_size, weight_sd):
+    def __init__(self, H_size, X_size, z_size, weight_sd, vocab_size):
         self.W_f = Var('W_f', np.random.randn(H_size, z_size) * weight_sd + 0.5)
         self.b_f = Var('b_f', np.zeros((H_size, 1)))
 
@@ -23,9 +23,9 @@ class Params:
         self.W_o = Var('W_o', np.random.randn(H_size, z_size) * weight_sd + 0.5)
         self.b_o = Var('b_o', np.zeros((H_size, 1)))
 
-        #For final layer to predict the next character
-        self.W_v = Var('W_v', np.random.randn(X_size, H_size) * weight_sd)
-        self.b_v = Var('b_v', np.zeros((X_size, 1)))
+        #For final layer to predict the next word
+        self.W_v = Var('W_v', np.random.randn(vocab_size, H_size) * weight_sd)
+        self.b_v = Var('b_v', np.zeros((vocab_size, 1)))
 
     def get_all(self):
         return [self.W_f, self.W_i, self.W_cbar, self.W_o, self.W_v,

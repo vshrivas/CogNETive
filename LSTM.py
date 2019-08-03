@@ -1,22 +1,33 @@
+    # importing all necessary modules
+from nltk.tokenize import sent_tokenize, word_tokenize
+import warnings
+
+warnings.filterwarnings(action = 'ignore')
+
+import gensim
+from gensim.models import Word2Vec
 import numpy as np
 from LSTM_Params import Params, Var
 
 class LSTMCell:
-    def __init__(self, X_size):
+    def __init__(self, X_size, vocab_size):
         self.X_size = X_size
+        self.vocab_size = vocab_size
         self.H_size = 100 # Size of the hidden layer
         self.t_steps = 25 # Number of time steps (length of the sequence) used for training
         self.learning_rate = 1e-1 # Learning rate
         self.epsilon = 1e-8
         self.weight_sd = 0.1 # Standard deviation of weights for initialization
         self.Z_size = self.H_size + self.X_size # Size of concatenate(H, X) vector
-        self.params = Params(self.H_size, self.X_size, self.Z_size, self.weight_sd)
+        self.params = Params(self.H_size, self.X_size, self.Z_size, self.weight_sd, self.vocab_size)
 
     # receives hidden state and cell state from previous timestep
     # and current state (x_t) so it can predict (x_(t + 1))
     def forwardprop(self, h_prev, c_prev, x):
+        x = x.reshape((self.X_size, 1))
         # z = concatenate h_prev and x with h_prev on top of x
         z = np.row_stack((h_prev, x))
+
 
         # forget gate layer: sigmoid outputs a number between 0 - 1,
         # for each cell state in c_prev (1 represents completely keep, 0 represents
@@ -42,9 +53,9 @@ class LSTMCell:
             'o_t':o_t, 'h_t':h_t, 'v':v, 'y_hat':yhat}
         return fprop_results
 
-    def backprop(self, y, dh_next, dc_next, c_prev, fprop_results):
+    def backprop(self, y_idx, dh_next, dc_next, c_prev, fprop_results):
         dv = np.copy(fprop_results['y_hat']) # differentiate loss function w.r.t y
-        dv[y] -= 1
+        dv[y_idx] -= 1
 
         # softmax layer
         dWv = np.dot(dv, fprop_results['h_t'].T) # dL / dWv = dL/dv * dv/dWv = dy * h
@@ -89,50 +100,86 @@ class LSTMCell:
         return dh_prev, dc_prev
 
     # inputs should be a dict from index to char
-    def training_step(self, inputs, outputs, h_prev_init, c_prev_init):
+    def train_example(self, input, output, embedding, vocab, h_prev_init, c_prev_init):
         loss = 0
         fresults = dict()
-        # do forward prop on all the training examples
+        # do forward prop for each timestep (word in sentence)
         # calculate loss by adding to it at each step
-        for tstep in range(0, len(inputs)):
-            x = np.zeros((self.X_size, 1))
-            x[inputs[tstep]] = 1
+        #print("input len %d" % (len(input)))
+        for tstep in range(0, len(input)):
+            word = input[tstep]
+            wvec = embedding.wv[word]
             if tstep == 0:
                 fresults[tstep] = self.forwardprop(h_prev_init,
-                c_prev_init, x)
+                c_prev_init, wvec)
             else:
                 fresults[tstep] = self.forwardprop(fresults[tstep - 1]['h_t'],
-                    fresults[tstep - 1]['c_t'], x)
+                    fresults[tstep - 1]['c_t'], wvec)
 
-            loss += -np.log(fresults[tstep]['y_hat'][outputs[tstep], 0])
+            loss += -np.log(fresults[tstep]['y_hat'][vocab[output[tstep]], 0])
 
-        # clear gradients
-        for var in self.params.get_all():
-            var.der.fill(0)
-
-        # initially these gradients are 0
+        # initially these are 0, before first timestep
         dh_next = np.zeros_like(fresults[0]['h_t']) #dh from the next character
         dc_next = np.zeros_like(fresults[0]['c_t']) #dh from the next character
-        # do backward pass on all training examples
-        # accumulate gradient at each
-        for tstep in reversed(range(0, len(inputs))):
+        # do backward pass on all timesteps, accumulate gradient at each
+        for tstep in reversed(range(0, len(input))):
+            word = output[tstep]
+            word_idx = vocab[word]
             if tstep == 0:
                 c_prev = c_prev_init
             else:
                 c_prev = fresults[tstep - 1]['c_t']
-            dh_next, dc_next = self.backprop(outputs[tstep], dh_next, dc_next, c_prev,
+            dh_next, dc_next = self.backprop(word_idx, dh_next, dc_next, c_prev,
                 fresults[tstep])
 
         # clip gradients
         for p in self.params.get_all():
             np.clip(p.der, -1, 1, out=p.der)
 
-        return loss, fresults[len(inputs) - 1]['h_t'], fresults[len(inputs) - 1]['c_t']
+        return loss, fresults[len(input) - 1]['h_t'], fresults[len(input) - 1]['c_t']
 
-    def train(self, data, chars):
+    def train_epoch(self, inputs, outputs, embedding, word_to_idx, idx_to_word, batch_size, epoch):
         smooth_loss = -np.log(1.0 / self.X_size) * self.t_steps
+        sent_idx = 0
+        h_prev = np.zeros((self.H_size, 1))
+        c_prev = np.zeros((self.H_size, 1))
+
+        # trained on all sentences, finished epoch
+        while sent_idx < len(inputs):
+            # for each batch
+            for i in range(0, batch_size):
+                input = inputs[sent_idx]
+                #print(input)
+                #output = input.copy()
+                #output.pop(0) # remove first char to offset output by 1
+                #input.pop(len(input) - 1) # remove punctuation ending sentence
+                output = outputs[sent_idx]
+                sent_idx += 1
+                if sent_idx >= len(inputs):
+                    break
+                loss, h_prev, c_prev = self.train_example(input, output, embedding, word_to_idx, np.copy(h_prev), np.copy(c_prev))
+                smooth_loss = smooth_loss * 0.999 + loss * 0.001
+
+            # update parameters with gradients
+            for var in self.params.get_all():
+                var.der /= batch_size
+                var.m += var.der * var.der
+                var.val += -(self.learning_rate * var.der /np.sqrt(var.m + self.epsilon))
+
+            # clear gradients
+            for var in self.params.get_all():
+                var.der.fill(0)
+
+            print("done with %d sentences" % (sent_idx))
+
+        print("epoch %d, loss %f\n" % (epoch, smooth_loss))
+        last_sent = inputs[len(inputs) - 1]
+        sample_idxes = self.sample(h_prev, c_prev, embedding.wv[last_sent[0]], 20, idx_to_word, embedding)
+        txt = " ".join(idx_to_word[idx] for idx in sample_idxes)
+        print(txt)
+
+        '''smooth_loss = -np.log(1.0 / self.X_size) * self.t_steps
         index = 0 # location in training data
-        iteration = 0
         char_to_idx = {ch:i for i,ch in enumerate(chars)}
         idx_to_char = {i:ch for i,ch in enumerate(chars)}
 
@@ -162,24 +209,20 @@ class LSTMCell:
                 var.val += -(self.learning_rate * var.der /np.sqrt(var.m + self.epsilon))
 
             iteration += 1
-            index += self.t_steps
+            index += self.t_steps'''
 
-    def sample(self, h_prev, c_prev, first_char_idx, sentence_length):
-        x = np.zeros((self.X_size, 1))
-        x[first_char_idx] = 1
-
+    def sample(self, h_prev, c_prev, x, sentence_length, idx_to_word, embedding):
         h = h_prev
         c = c_prev
 
         indexes = []
 
-        for t in range(sentence_length):
+        for t in range(0, sentence_length):
             fprop_results = self.forwardprop(h, c, x)
             h = fprop_results['h_t']
             c = fprop_results['c_t']
-            idx = np.random.choice(range(self.X_size), p=fprop_results['y_hat'].ravel())
-            x = np.zeros((self.X_size, 1))
-            x[idx] = 1
+            idx = np.random.choice(range(self.vocab_size), p=fprop_results['y_hat'].ravel())
+            x = embedding.wv[idx_to_word[idx]]
             indexes.append(idx)
 
         return indexes
@@ -198,13 +241,59 @@ class LSTMCell:
     def tanh(self, x):
         return np.tanh(x)
 
+def get_words(embedding_size):
+    sample = open("republic.txt", "r")
+    s = sample.read()
+
+    # Replaces escape character with space
+    f = s.replace("\n", " ")
+    f = f.replace('--', ' ')
+
+    sentences = []
+    vocab = {}
+    idx_to_word = {}
+    vocab_size = 0
+    # iterate through each sentence in the file
+    for i in sent_tokenize(f):
+        temp = []
+        # tokenize the sentence into words
+        for j in word_tokenize(i):
+            word = j.lower()
+            temp.append(word)
+            if word not in vocab.keys():
+                vocab[word] = vocab_size
+                idx_to_word[vocab_size] = word
+                vocab_size += 1
+        if len(temp) > 1:
+            assert(len(temp) > 1)
+            sentences.append(temp)
+
+    embedding = Word2Vec(sentences, size=embedding_size, window=5, min_count=1, workers=4)
+    return sentences, embedding, vocab, idx_to_word
 
 def main():
-    data = open('input1.txt', 'r').read()
+    '''data = open('input1.txt', 'r').read()
     chars = list(set(data))
     data_size, X_size = len(data), len(chars)
-    print("data has %d characters, %d unique" % (data_size, X_size))
-    lstmCell = LSTMCell(X_size)
-    lstmCell.train(data, chars)
+    print("data has %d characters, %d unique" % (data_size, X_size))'''
+    embedding_size = 100
+    sentences, embedding, vocab, idx_to_word = get_words(embedding_size)
+    print("done finding embedding")
+    print("num sentences %d" % (len(sentences)))
+    print("size vocab %d", len(vocab))
+    lstmCell = LSTMCell(embedding_size, len(vocab))
+    numEpochs = 10
+    inputs = []
+    outputs = []
+    for sent in sentences:
+        input = sent.copy()
+        output = sent.copy()
+        output.pop(0) # remove first char to offset output by 1
+        input.pop(len(input) - 1)
+        inputs.append(input)
+        outputs.append(output)
 
+    for epoch in range(0, numEpochs):
+        lstmCell.train_epoch(inputs, outputs, embedding, vocab, idx_to_word, 120, epoch)
+        print("done with %d epochs*******\n" % numEpochs)
 main()
