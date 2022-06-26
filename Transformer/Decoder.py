@@ -41,7 +41,7 @@ class TransformerDecoder(nn.Module):
         self.embedding_layer = nn.Embedding(target_vocab_size, attention_vec_dim)
         self.dropout = nn.Dropout(dropout_rate)
         self.num_layers = num_layers
-        self.encoder_layers = [DecoderLayer(attention_vec_dim, num_heads, dff, dropout_rate) \
+        self.decoder_layers = [DecoderLayer(attention_vec_dim, num_heads, dff, dropout_rate) \
                 for _ in range(self.num_layers)]
 
 
@@ -50,5 +50,5 @@ class TransformerDecoder(nn.Module):
         #TODO: add positional encodings
         dec_output = self.dropout(x)
         for i in range(self.num_layers):
-            dec_output = self.encoder_layers[i](x, enc_output, look_ahead_mask, padding_mask)
+            dec_output = self.decoder_layers[i](x, enc_output, look_ahead_mask, padding_mask)
         return dec_output

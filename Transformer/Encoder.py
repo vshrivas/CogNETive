@@ -30,6 +30,14 @@ class EncoderLayer(nn.Module):
 
 class TransformerEncoder(nn.Module):
     def __init__(self, num_layers, attention_vec_dim, num_heads, dff, dropout_rate, input_vocab_size):
+        """
+            num_layers: number of encoder blocks
+            attention_vec_dim: 
+            num_heads:
+            dff:
+            dropout_rate:
+            input_vocab_size: 
+        """
         super(TransformerEncoder, self).__init__()
         self.embedding_layer = nn.Embedding(input_vocab_size, attention_vec_dim)
         self.dropout = nn.Dropout(dropout_rate)
